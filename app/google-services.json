@@ -1,0 +1,122 @@
+{
+  "project_info": {
+    "project_number": "480276018642",
+    "firebase_url": "https://alert-groove-159806.firebaseio.com",
+    "project_id": "alert-groove-159806",
+    "storage_bucket": "alert-groove-159806.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:480276018642:android:9727f4c7d8d9d045ddc40b",
+        "android_client_info": {
+          "package_name": "com.n00blife.lockit"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "480276018642-if6m7mv7tq3dl5stn8fspv8omc6f542d.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.n00blife.lockit",
+            "certificate_hash": "a45e57085fc9edd6793f00cd09f98f7005a46b41"
+          }
+        },
+        {
+          "client_id": "480276018642-au0g3r063gvqodbuof907b9ng4cclivs.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBK1D5Im6akX0ufYMEdv1m7MiyOUsxJqWw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "480276018642-au0g3r063gvqodbuof907b9ng4cclivs.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:480276018642:android:ad81ac4136801be6ddc40b",
+        "android_client_info": {
+          "package_name": "com.nooblife.wilock"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "480276018642-stuit0spgf3mnf3n823s8hetj82mvjl4.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.nooblife.wilock",
+            "certificate_hash": "a27079bd3129e0445b386ec2bddde5b611edb866"
+          }
+        },
+        {
+          "client_id": "480276018642-au0g3r063gvqodbuof907b9ng4cclivs.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBK1D5Im6akX0ufYMEdv1m7MiyOUsxJqWw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "480276018642-au0g3r063gvqodbuof907b9ng4cclivs.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:480276018642:android:fbe4dc181f43849dddc40b",
+        "android_client_info": {
+          "package_name": "nooblife.firelock"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "480276018642-mul41algktnnbjpqs84f34f6he1hhqul.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "nooblife.firelock",
+            "certificate_hash": "a45e57085fc9edd6793f00cd09f98f7005a46b41"
+          }
+        },
+        {
+          "client_id": "480276018642-au0g3r063gvqodbuof907b9ng4cclivs.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBK1D5Im6akX0ufYMEdv1m7MiyOUsxJqWw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "480276018642-au0g3r063gvqodbuof907b9ng4cclivs.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
