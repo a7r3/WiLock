@@ -1,8 +1,10 @@
 package nooblife.lockit.wilock
 
-import android.content.DialogInterface
+import android.content.Context
 import android.content.SharedPreferences
 import android.graphics.Color
+import android.net.nsd.NsdManager
+import android.net.nsd.NsdServiceInfo
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -12,14 +14,16 @@ import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.biometric.BiometricPrompt
 import androidx.cardview.widget.CardView
 import androidx.preference.PreferenceManager
 import com.google.android.gms.nearby.Nearby
-import com.google.android.gms.nearby.connection.*
+import java.io.BufferedOutputStream
+import java.io.PrintWriter
+import java.net.Socket
 import java.util.concurrent.Executors
+import kotlin.properties.Delegates
 
 
 class MainActivity : AppCompatActivity() {
@@ -35,7 +39,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var connectionCard: CardView
     private var currentState: State = State.IDLE
     private lateinit var tvDedicatedServiceId: String
-    private lateinit var currentPayload: Payload
+    private lateinit var currentAction: String
 
     enum class State {
         IDLE, PROGRESS, CONNECTED, FAILURE
@@ -114,96 +118,73 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Just a sender, not required to listen
-    val payloadCallback = object : PayloadCallback() {
-        override fun onPayloadReceived(p0: String, p1: Payload) {
-        }
-
-        override fun onPayloadTransferUpdate(p0: String, p1: PayloadTransferUpdate) {
-        }
+    fun connectToClient(nsdServiceInfo: NsdServiceInfo) {
+        val socket = Socket(nsdServiceInfo.host, nsdServiceInfo.port)
+        Log.d(TAG, "connectToClient: Connection to Server Success")
+        val bufferedOutputStream = BufferedOutputStream(socket.getOutputStream())
+        val printWriter = PrintWriter(bufferedOutputStream)
+        printWriter.write(currentAction)
+        Log.d(TAG, "connectToClient: Data written to buffer")
+        printWriter.close()
+        bufferedOutputStream.close()
+        socket.close()
+        Log.d(TAG, "connectToClient: Connection done!")
+        runOnUiThread { setConnectionSuccessful() }
     }
 
-    val connectionLifecycleCallback = object : ConnectionLifecycleCallback() {
-        override fun onConnectionResult(p0: String, p1: ConnectionResolution) {
-            when (p1.status.statusCode) {
-                ConnectionsStatusCodes.STATUS_OK -> {
-                    showToast("Connection Successful")
-                    setConnectionSuccessful()
-                    Nearby.getConnectionsClient(this@MainActivity)
-                        .sendPayload(p0, currentPayload).addOnSuccessListener {
-                            showToast("${currentPayload.asBytes().toString()} SENT")
-                            Nearby.getConnectionsClient(this@MainActivity)
-                                .disconnectFromEndpoint(p0)
-                            Nearby.getConnectionsClient(this@MainActivity)
-                                .stopDiscovery()
-                            currentState = State.IDLE
-                        }
-                }
-                ConnectionsStatusCodes.STATUS_ERROR -> {
-                    showToast("Connection failed")
-                    setConnectionFailed()
-                }
+    val resolveListener = object : NsdManager.ResolveListener {
+        override fun onResolveFailed(p0: NsdServiceInfo?, p1: Int) {
+            Log.d(TAG, "onResolveFailed: $p1")
+            setConnectionFailed()
+        }
+
+        override fun onServiceResolved(p0: NsdServiceInfo?) {
+            if (p0?.serviceName.equals(serviceName)) {
+                Log.d(TAG, "onServiceResolved: Same IP")
+                return
             }
-        }
 
-        override fun onDisconnected(p0: String) {
-            Log.d(TAG, "onDisconnected: $p0")
-        }
-
-        override fun onConnectionInitiated(endpointId: String, connectionInfo: ConnectionInfo) {
-            if (authenticationCode.isEmpty()) {
-                authenticationCode = connectionInfo.authenticationToken
-                sharedPreferences.edit().putString(Util.PREF_LOCKIT_RC_SERVICE_ID, authenticationCode).apply()
-                AlertDialog.Builder(this@MainActivity)
-                    .setTitle("Accept connection to " + connectionInfo.endpointName)
-                    .setMessage("Confirm the code matches on both devices: ${connectionInfo.authenticationToken}")
-                    .setPositiveButton("Accept") { _: DialogInterface, i: Int ->
-                        Nearby.getConnectionsClient(this@MainActivity)
-                            .acceptConnection(endpointId, payloadCallback)
-                    }
-                    .setNegativeButton(android.R.string.cancel) { _: DialogInterface, _: Int ->
-                        Nearby.getConnectionsClient(this@MainActivity)
-                            .rejectConnection(endpointId)
-                    }
-                    .setIcon(android.R.drawable.ic_dialog_alert)
-                    .show()
-            } else {
-                Log.d(TAG, "onConnectionInitiated: accepting connection")
-                Nearby.getConnectionsClient(this@MainActivity)
-                    .acceptConnection(endpointId, payloadCallback)
-            }
+            if (p0 != null)
+                Executors.newSingleThreadExecutor().run {  connectToClient(p0) }
         }
     }
 
-    val endpointDiscoveryCallback = object : EndpointDiscoveryCallback() {
-        override fun onEndpointFound(p0: String, p1: DiscoveredEndpointInfo) {
-            Nearby.getConnectionsClient(this@MainActivity)
-                .requestConnection("remotelocker", p0, connectionLifecycleCallback)
-                .addOnSuccessListener {
-                    Log.d(TAG, "onEndpointFound: success")
-                }
-                .addOnFailureListener {
-                    it.printStackTrace()
-                    Log.d(TAG, "onEndpointFound: failure")
-                };
-        }
-
-        override fun onEndpointLost(p0: String) {
-            Log.d(TAG, "onEndpointLost: $p0")
-        }
-    }
+    private lateinit var nsdManager: NsdManager
+    private lateinit var serviceName: String
+//    private lateinit var host: String
+//    private var port by Delegates.notNull<Int>()
 
     fun startDiscovery() {
-        val discoveryOptions = DiscoveryOptions.Builder().setStrategy(Strategy.P2P_STAR).build()
-        Nearby.getConnectionsClient(this)
-            .startDiscovery(tvDedicatedServiceId, endpointDiscoveryCallback, discoveryOptions)
-            .addOnSuccessListener {
-                Log.d(TAG, "startDiscovery: STARTED $tvDedicatedServiceId")
-            }
-            .addOnFailureListener {
-                it.printStackTrace()
-                Log.d(TAG, "startDiscovery: FAILURE")
-            };
+        nsdManager = (getSystemService(Context.NSD_SERVICE) as NsdManager)
+        nsdManager.discoverServices(Util.LOCKIT_SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD,
+                object : NsdManager.DiscoveryListener {
+                    override fun onServiceFound(p0: NsdServiceInfo?) {
+                        if (p0?.serviceType.equals(Util.LOCKIT_DISCOVERY_SERVICE_ID)) {
+                            serviceName = p0?.serviceType.toString()
+                            nsdManager.resolveService(p0, resolveListener)
+                        }
+                    }
+
+                    override fun onStopDiscoveryFailed(p0: String?, p1: Int) {
+                        Log.d(TAG, "onStopDiscoveryFailed: $p0 $p1")
+                    }
+
+                    override fun onStartDiscoveryFailed(p0: String?, p1: Int) {
+                        Log.d(TAG, "onStartDiscoveryFailed: $p0 $p1")
+                    }
+
+                    override fun onDiscoveryStarted(p0: String?) {
+                        Log.d(TAG, "onDiscoveryStarted: $p0")
+                    }
+
+                    override fun onDiscoveryStopped(p0: String?) {
+                        Log.d(TAG, "onDiscoveryStopped: $p0")
+                    }
+
+                    override fun onServiceLost(p0: NsdServiceInfo?) {
+                        Log.d(TAG, "onServiceLost: " + p0?.serviceName)
+                    }
+                })
     }
 
     fun authAndSend(action: String) {
@@ -228,7 +209,7 @@ class MainActivity : AppCompatActivity() {
 
                 override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                     super.onAuthenticationSucceeded(result)
-                    currentPayload = Payload.fromBytes(action.toByteArray())
+                    currentAction = action
                     if (!authenticationCode.isNullOrEmpty()) {
                         runOnUiThread { setProgress() }
                         showToast("Sent $action to TV")
