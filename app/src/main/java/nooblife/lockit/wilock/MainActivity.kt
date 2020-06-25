@@ -18,7 +18,15 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.biometric.BiometricPrompt
 import androidx.cardview.widget.CardView
 import androidx.preference.PreferenceManager
+import com.github.druk.dnssd.BrowseListener
+import com.github.druk.dnssd.DNSSDBindable
+import com.github.druk.dnssd.DNSSDEmbedded
+import com.github.druk.dnssd.DNSSDService
+import com.github.druk.rx2dnssd.Rx2DnssdBindable
+import com.github.druk.rx2dnssd.Rx2DnssdEmbedded
 import com.google.android.gms.nearby.Nearby
+import io.reactivex.android.schedulers.AndroidSchedulers
+import io.reactivex.schedulers.Schedulers
 import java.io.BufferedOutputStream
 import java.io.PrintWriter
 import java.net.Socket
@@ -118,8 +126,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    fun connectToClient(nsdServiceInfo: NsdServiceInfo) {
-        val socket = Socket(nsdServiceInfo.host, nsdServiceInfo.port)
+    fun connectToClient(host: String?, port: Int) {
+        val socket = Socket(host, port)
         Log.d(TAG, "connectToClient: Connection to Server Success")
         val bufferedOutputStream = BufferedOutputStream(socket.getOutputStream())
         val printWriter = PrintWriter(bufferedOutputStream)
@@ -132,59 +140,21 @@ class MainActivity : AppCompatActivity() {
         runOnUiThread { setConnectionSuccessful() }
     }
 
-    val resolveListener = object : NsdManager.ResolveListener {
-        override fun onResolveFailed(p0: NsdServiceInfo?, p1: Int) {
-            Log.d(TAG, "onResolveFailed: $p1")
-            setConnectionFailed()
-        }
-
-        override fun onServiceResolved(p0: NsdServiceInfo?) {
-            if (p0?.serviceName.equals(serviceName)) {
-                Log.d(TAG, "onServiceResolved: Same IP")
-                return
-            }
-
-            if (p0 != null)
-                Executors.newSingleThreadExecutor().run {  connectToClient(p0) }
-        }
-    }
-
-    private lateinit var nsdManager: NsdManager
-    private lateinit var serviceName: String
-//    private lateinit var host: String
-//    private var port by Delegates.notNull<Int>()
-
     fun startDiscovery() {
-        nsdManager = (getSystemService(Context.NSD_SERVICE) as NsdManager)
-        nsdManager.discoverServices(Util.LOCKIT_SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD,
-                object : NsdManager.DiscoveryListener {
-                    override fun onServiceFound(p0: NsdServiceInfo?) {
-                        if (p0?.serviceType.equals(Util.LOCKIT_DISCOVERY_SERVICE_ID)) {
-                            serviceName = p0?.serviceType.toString()
-                            nsdManager.resolveService(p0, resolveListener)
-                        }
-                    }
+        val rx2Dnssd = Rx2DnssdBindable(this)
+        val browseDisposable = rx2Dnssd.browse(Util.LOCKIT_SERVICE_TYPE, "local.")
+            .compose(rx2Dnssd.resolve())
+            .compose(rx2Dnssd.queryIPV4Records())
+            .subscribeOn(Schedulers.io())
+            .observeOn(Schedulers.io())
+            .subscribe({
+                Log.d(TAG, "startDiscovery: Registered successfully ${it.inet4Address}")
+                connectToClient(it.inet4Address?.hostAddress, it.port)
+            }, {
+                it.printStackTrace()
+            }, {
 
-                    override fun onStopDiscoveryFailed(p0: String?, p1: Int) {
-                        Log.d(TAG, "onStopDiscoveryFailed: $p0 $p1")
-                    }
-
-                    override fun onStartDiscoveryFailed(p0: String?, p1: Int) {
-                        Log.d(TAG, "onStartDiscoveryFailed: $p0 $p1")
-                    }
-
-                    override fun onDiscoveryStarted(p0: String?) {
-                        Log.d(TAG, "onDiscoveryStarted: $p0")
-                    }
-
-                    override fun onDiscoveryStopped(p0: String?) {
-                        Log.d(TAG, "onDiscoveryStopped: $p0")
-                    }
-
-                    override fun onServiceLost(p0: NsdServiceInfo?) {
-                        Log.d(TAG, "onServiceLost: " + p0?.serviceName)
-                    }
-                })
+            })
     }
 
     fun authAndSend(action: String) {
