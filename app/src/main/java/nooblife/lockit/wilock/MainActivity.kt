@@ -159,8 +159,12 @@ class MainActivity : AppCompatActivity() {
             .subscribeOn(Schedulers.io())
             .observeOn(Schedulers.io())
             .subscribe({
-                if (currentAction == PAIR)
+
+                if (currentAction == PAIR) {
+                    if (sharedPreferences.getString(Util.PREF_LOCKIT_TV_NAME, "").equals(it.serviceName))
+                        return@subscribe
                     sharedPreferences.edit().putString(Util.PREF_LOCKIT_TV_NAME, it.serviceName).apply()
+                }
 
                 Log.d(TAG, "startDiscovery: Registered successfully ${it.inet4Address}")
                 connectToClient(it.inet4Address?.hostAddress, it.port)
