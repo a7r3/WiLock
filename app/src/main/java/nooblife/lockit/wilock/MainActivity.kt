@@ -75,7 +75,7 @@ class MainActivity : AppCompatActivity() {
         connectionIcon.visibility = View.VISIBLE
         connectionCard.setCardBackgroundColor(Color.parseColor("#4caf50"))
         Nearby.getConnectionsClient(this).stopDiscovery()
-        currentState = State.CONNECTED
+        currentState = State.IDLE
         connectionCard.setOnClickListener {}
     }
 
@@ -180,12 +180,12 @@ class MainActivity : AppCompatActivity() {
                 override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                     super.onAuthenticationSucceeded(result)
                     currentAction = action
-                    if (!authenticationCode.isNullOrEmpty()) {
+//                    if (!authenticationCode.isNullOrEmpty()) {
                         runOnUiThread { setProgress() }
                         showToast("Sent $action to TV")
-                    } else {
-                        showToast("Failure: Not connected to TV")
-                    }
+//                    } else {
+//                        showToast("Failure: Not connected to TV")
+//                    }
                 }
 
                 override fun onAuthenticationFailed() {
