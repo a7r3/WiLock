@@ -1,10 +1,7 @@
 package nooblife.lockit.wilock
 
-import android.content.Context
 import android.content.SharedPreferences
 import android.graphics.Color
-import android.net.nsd.NsdManager
-import android.net.nsd.NsdServiceInfo
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -18,20 +15,14 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.biometric.BiometricPrompt
 import androidx.cardview.widget.CardView
 import androidx.preference.PreferenceManager
-import com.github.druk.dnssd.BrowseListener
-import com.github.druk.dnssd.DNSSDBindable
-import com.github.druk.dnssd.DNSSDEmbedded
-import com.github.druk.dnssd.DNSSDService
 import com.github.druk.rx2dnssd.Rx2DnssdBindable
-import com.github.druk.rx2dnssd.Rx2DnssdEmbedded
 import com.google.android.gms.nearby.Nearby
-import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.schedulers.Schedulers
-import java.io.BufferedOutputStream
-import java.io.PrintWriter
+import java.io.*
+import java.lang.Exception
 import java.net.Socket
+import java.util.*
 import java.util.concurrent.Executors
-import kotlin.properties.Delegates
 
 
 class MainActivity : AppCompatActivity() {
@@ -40,17 +31,16 @@ class MainActivity : AppCompatActivity() {
     private val UNLOCK = "unlock";
     private val TAG = javaClass.simpleName
     private lateinit var sharedPreferences: SharedPreferences
-    private lateinit var authenticationCode: String
+    private lateinit var tvService: String
     private lateinit var connectionProgress: ProgressBar
     private lateinit var connectionIcon: ImageView
     private lateinit var connectionText: TextView
     private lateinit var connectionCard: CardView
     private var currentState: State = State.IDLE
-    private lateinit var tvDedicatedServiceId: String
     private lateinit var currentAction: String
 
     enum class State {
-        IDLE, PROGRESS, CONNECTED, FAILURE
+        IDLE, PROGRESS, NOT_INITIALIZED, FAILURE
     }
 
     fun showToast(text: String) {
@@ -61,7 +51,7 @@ class MainActivity : AppCompatActivity() {
 
     fun setProgress() {
         connectionProgress.visibility = View.VISIBLE
-        connectionText.text = "Connecting to TV"
+        connectionText.text = "${currentAction}ing TV"
         connectionIcon.visibility = View.GONE
         connectionCard.setCardBackgroundColor(Color.parseColor("#F9A825"))
         connectionCard.setOnClickListener {}
@@ -75,6 +65,7 @@ class MainActivity : AppCompatActivity() {
         connectionIcon.visibility = View.VISIBLE
         connectionCard.setCardBackgroundColor(Color.parseColor("#4caf50"))
         Nearby.getConnectionsClient(this).stopDiscovery()
+        showToast("TV is paired")
         currentState = State.IDLE
         connectionCard.setOnClickListener {}
     }
@@ -95,7 +86,8 @@ class MainActivity : AppCompatActivity() {
         connectionText.text = "Tap to pair with your TV"
         connectionIcon.visibility = View.GONE
         connectionCard.setCardBackgroundColor(Color.parseColor("#d32f2f"))
-        currentState = State.IDLE
+        currentState = State.NOT_INITIALIZED
+        currentAction = "pair"
         connectionCard.setOnClickListener {
             setProgress()
         }
@@ -116,33 +108,46 @@ class MainActivity : AppCompatActivity() {
         connectionCard = findViewById(R.id.tv_status)
 
         sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this)
-        authenticationCode = sharedPreferences.getString(Util.PREF_LOCKIT_RC_SERVICE_ID, "").toString()
+        val tvServiceId = sharedPreferences.getString(Util.PREF_LOCKIT_RC_SERVICE_ID, Util.LOCKIT_DEFAULT_SERVICE_ID).toString()
 
-        if (authenticationCode.isEmpty()) {
+        tvService = String.format(Util.LOCKIT_SERVICE_TEMPLATE, tvServiceId)
+        if (tvServiceId == Util.LOCKIT_DEFAULT_SERVICE_ID) {
             setReadyToPair()
-            tvDedicatedServiceId = Util.LOCKIT_SERVICE_ID
         } else {
-            tvDedicatedServiceId = authenticationCode
+            setConnectionSuccessful()
         }
     }
 
     fun connectToClient(host: String?, port: Int) {
-        val socket = Socket(host, port)
-        Log.d(TAG, "connectToClient: Connection to Server Success")
-        val bufferedOutputStream = BufferedOutputStream(socket.getOutputStream())
-        val printWriter = PrintWriter(bufferedOutputStream)
-        printWriter.write(currentAction)
-        Log.d(TAG, "connectToClient: Data written to buffer")
-        printWriter.close()
-        bufferedOutputStream.close()
-        socket.close()
-        Log.d(TAG, "connectToClient: Connection done!")
-        runOnUiThread { setConnectionSuccessful() }
+        try {
+            val socket = Socket(host, port)
+            Log.d(TAG, "connectToClient: Connection to Server Success")
+            val bufferedOutputStream = BufferedOutputStream(socket.getOutputStream())
+            val printWriter = PrintWriter(bufferedOutputStream)
+            printWriter.println(currentAction)
+            printWriter.flush()
+            Log.d(TAG, "connectToClient: Data written to buffer")
+
+            if (currentAction == "pair") {
+                val bufferedReader = BufferedReader(InputStreamReader(socket.getInputStream()))
+                val tvServiceId = bufferedReader.readLine()
+                Log.d(TAG, "connectToClient: dedicated service id $tvServiceId")
+                sharedPreferences.edit().putString(Util.PREF_LOCKIT_RC_SERVICE_ID, tvServiceId).apply()
+            }
+
+            bufferedOutputStream.close()
+            socket.close()
+            Log.d(TAG, "connectToClient: Connection done!")
+            runOnUiThread { setConnectionSuccessful() }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            runOnUiThread { setConnectionFailed() }
+        }
     }
 
     fun startDiscovery() {
         val rx2Dnssd = Rx2DnssdBindable(this)
-        val browseDisposable = rx2Dnssd.browse(Util.LOCKIT_SERVICE_TYPE, "local.")
+        val browseDisposable = rx2Dnssd.browse(tvService, "local.")
             .compose(rx2Dnssd.resolve())
             .compose(rx2Dnssd.queryIPV4Records())
             .subscribeOn(Schedulers.io())
@@ -182,7 +187,6 @@ class MainActivity : AppCompatActivity() {
                     currentAction = action
 //                    if (!authenticationCode.isNullOrEmpty()) {
                         runOnUiThread { setProgress() }
-                        showToast("Sent $action to TV")
 //                    } else {
 //                        showToast("Failure: Not connected to TV")
 //                    }
