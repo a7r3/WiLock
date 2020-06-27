@@ -164,6 +164,7 @@ class MainActivity : AppCompatActivity() {
                     if (sharedPreferences.getString(Util.PREF_LOCKIT_TV_NAME, "").equals(it.serviceName))
                         return@subscribe
                     sharedPreferences.edit().putString(Util.PREF_LOCKIT_TV_NAME, it.serviceName).apply()
+                    connectedTvName = it.serviceName
                 }
 
                 Log.d(TAG, "startDiscovery: Registered successfully ${it.inet4Address}")
