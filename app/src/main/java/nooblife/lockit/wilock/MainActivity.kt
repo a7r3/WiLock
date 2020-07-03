@@ -1,11 +1,15 @@
 package nooblife.lockit.wilock
 
 import android.content.SharedPreferences
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.text.SpannableString
+import android.text.SpannableStringBuilder
+import android.text.style.ForegroundColorSpan
 import android.util.Log
 import android.view.View
 import android.widget.ImageView
@@ -15,7 +19,11 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.biometric.BiometricPrompt
 import androidx.cardview.widget.CardView
+import androidx.core.content.ContextCompat
 import androidx.preference.PreferenceManager
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import com.github.druk.rx2dnssd.BonjourService
 import com.github.druk.rx2dnssd.Rx2DnssdBindable
 import io.reactivex.schedulers.Schedulers
 import java.io.BufferedOutputStream
@@ -32,17 +40,22 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var sharedPreferences: SharedPreferences
     private lateinit var tvService: String
+    private lateinit var lockView: TextView
     private lateinit var connectionProgress: ProgressBar
     private lateinit var connectionIcon: ImageView
     private lateinit var connectionText: TextView
     private lateinit var connectionCard: CardView
+    private lateinit var logsList: RecyclerView
+    private var tvBonjourService: BonjourService? = null
 
     private val LOCK = "lock";
     private val UNLOCK = "unlock";
     private val PAIR = "pair";
+    private val CONNECT = "connect";
 
     private lateinit var currentAction: String
-    private lateinit var connectedTvName: String
+    private var connectedTvName: String = "TV"
+    private var isLocked = false
 
     private var currentState: State = State.READY_TO_COMMAND
 
@@ -67,16 +80,37 @@ class MainActivity : AppCompatActivity() {
         resolveAndConnectToClient()
     }
 
+    fun updateOps() {
+        lockView.text = if (isLocked) "Unlock" else "Lock"
+        lockView.setCompoundDrawables(if (isLocked) ContextCompat.getDrawable(this, R.drawable.ic_baseline_lock_open_24) else ContextCompat.getDrawable(this, R.drawable.ic_outline_lock_24), null, null, null)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            lockView.setTextColor(Color.parseColor(if (isLocked) "#66bb6a" else "#ef5350"))
+            lockView.compoundDrawableTintList = ColorStateList.valueOf(Color.parseColor(if (isLocked) "#66bb6a" else "#ef5350"))
+        }
+    }
+
     fun setReadyToCommand() {
+        updateOps()
         connectionProgress.visibility = View.GONE
-        connectionText.text = "Paired with $connectedTvName"
+
+        connectionCard.setCardBackgroundColor(ContextCompat.getColor(this, R.color.cardview_dark_background))
+
+        val text =  "Your $connectedTvName is "
+        val status = SpannableString(if (isLocked) "Locked" else "Unlocked")
+        status.setSpan(ForegroundColorSpan(Color.parseColor(if (isLocked) "#ef5350" else "#66bbc6")), 0, status.length, 0)
+        val spannableStringBuilder = SpannableStringBuilder()
+        spannableStringBuilder.append(text)
+        spannableStringBuilder.append(status)
+        connectionText.setText(spannableStringBuilder, TextView.BufferType.SPANNABLE)
+
         connectionIcon.visibility = View.VISIBLE
-        connectionCard.setCardBackgroundColor(Color.parseColor("#4caf50"))
+        connectionIcon.setImageResource(if (isLocked) R.drawable.ic_outline_lock_24 else R.drawable.ic_baseline_lock_open_24)
 
         currentState = State.READY_TO_COMMAND
     }
 
     fun setReadyToPair() {
+        lockView.visibility = View.GONE
         connectionProgress.visibility = View.GONE
         connectionText.text = "Tap to pair with your TV now"
         connectionIcon.visibility = View.GONE
@@ -95,10 +129,12 @@ class MainActivity : AppCompatActivity() {
             window.statusBarColor = Color.TRANSPARENT
         }
 
-        val lockView: View = findViewById(R.id.lock)
-        lockView.setOnClickListener { authAndSend(LOCK) }
-        val unlockView: View = findViewById(R.id.unlock)
-        unlockView.setOnClickListener { authAndSend(UNLOCK) }
+        lockView = findViewById(R.id.lock)
+        lockView.setOnClickListener { authAndSend() }
+
+        logsList = findViewById(R.id.logs_list)
+        logsList.layoutManager = LinearLayoutManager(this, RecyclerView.VERTICAL, false)
+        logsList.adapter = LogsAdapter(this, ArrayList())
 
         connectionProgress = findViewById(R.id.connection_progress)
         connectionIcon = findViewById(R.id.connection_status_icon)
@@ -120,7 +156,8 @@ class MainActivity : AppCompatActivity() {
         if (tvServiceId == Util.LOCKIT_DEFAULT_SERVICE_ID) {
             setReadyToPair()
         } else {
-            setReadyToCommand()
+            currentAction = CONNECT;
+            startConnectionWithTv()
         }
     }
 
@@ -134,49 +171,80 @@ class MainActivity : AppCompatActivity() {
             printWriter.flush()
             Log.d(TAG, "connectToClient: Data written to buffer")
 
-            if (currentAction == PAIR) {
-                val bufferedReader = BufferedReader(InputStreamReader(socket.getInputStream()))
-                val tvServiceId = bufferedReader.readLine()
-                Log.d(TAG, "connectToClient: dedicated service id $tvServiceId")
-                sharedPreferences.edit().putString(Util.PREF_LOCKIT_RC_SERVICE_ID, tvServiceId).apply()
+            val bufferedReader = BufferedReader(InputStreamReader(socket.getInputStream()))
+            val serverSays = bufferedReader.readLine()
+
+            when (currentAction) {
+                PAIR -> {
+                    Log.d(TAG, "connectToClient: dedicated service id $serverSays")
+                    sharedPreferences.edit().putString(Util.PREF_LOCKIT_RC_SERVICE_ID, serverSays).apply()
+                }
+                CONNECT -> {
+                    Log.d(TAG, "connectToClient: success");
+                    isLocked = serverSays.toBoolean()
+                }
+                LOCK -> isLocked = true
+                UNLOCK -> isLocked = false
             }
 
+            bufferedReader.close()
             bufferedOutputStream.close()
             socket.close()
             Log.d(TAG, "connectToClient: Connection done!")
-            runOnUiThread { setReadyToCommand() }
+            runOnUiThread {
+                (logsList.adapter as LogsAdapter).addLog(AppLog(currentAction, "success"))
+                setReadyToCommand()
+            }
         } catch (e: Exception) {
             e.printStackTrace()
-            runOnUiThread { setReadyToPair() }
+            runOnUiThread {
+                (logsList.adapter as LogsAdapter).addLog(AppLog(currentAction, "failure"))
+                setReadyToCommand()
+            }
         }
     }
 
+    private var isResolvedOnce = false
+
     fun resolveAndConnectToClient() {
-        val rx2Dnssd = Rx2DnssdBindable(this)
-        val browseDisposable = rx2Dnssd.browse(tvService, "local.")
-            .compose(rx2Dnssd.resolve())
-            .compose(rx2Dnssd.queryIPV4Records())
-            .subscribeOn(Schedulers.io())
-            .observeOn(Schedulers.io())
-            .subscribe({
+        tvBonjourService?.also { service ->
+            Executors.newSingleThreadExecutor().execute {
+                connectToClient(service.inet4Address?.hostAddress, service.port)
+            }
+        } ?: run {
+            isResolvedOnce = false;
+            val rx2Dnssd = Rx2DnssdBindable(this)
+            val browseDisposable = rx2Dnssd.browse(Util.LOCKIT_SERVICE_TEMPLATE.format(Util.LOCKIT_DEFAULT_SERVICE_ID), "local.")
+                .compose(rx2Dnssd.resolve())
+                .compose(rx2Dnssd.queryIPV4Records())
+                .subscribeOn(Schedulers.io())
+                .observeOn(Schedulers.io())
+                .subscribe({
 
-                if (currentAction == PAIR) {
-                    if (sharedPreferences.getString(Util.PREF_LOCKIT_TV_NAME, "").equals(it.serviceName))
+                    if (isResolvedOnce)
                         return@subscribe
-                    sharedPreferences.edit().putString(Util.PREF_LOCKIT_TV_NAME, it.serviceName).apply()
-                    connectedTvName = it.serviceName
-                }
 
-                Log.d(TAG, "startDiscovery: Registered successfully ${it.inet4Address}")
-                connectToClient(it.inet4Address?.hostAddress, it.port)
-            }, {
-                it.printStackTrace()
-            }, {
+                    isResolvedOnce = true
 
-            })
+                    if (currentAction == PAIR) {
+                        sharedPreferences.edit().putString(Util.PREF_LOCKIT_TV_NAME, it.serviceName).apply()
+                        connectedTvName = it.serviceName
+                    }
+
+                    if (tvBonjourService == null) {
+                        tvBonjourService = it
+                    }
+
+                    Log.d(TAG, "startDiscovery: Registered successfully ${it.inet4Address}")
+                    connectToClient(it.inet4Address?.hostAddress, it.port)
+                }, {
+                    it.printStackTrace()
+                }, {
+                })
+        }
     }
 
-    fun authAndSend(action: String) {
+    fun authAndSend() {
         if (currentState == State.CONNECTION_ONGOING) {
             showToast("Another request is in progress")
             return
@@ -190,7 +258,7 @@ class MainActivity : AppCompatActivity() {
         val promptInfo = BiometricPrompt.PromptInfo.Builder()
             .setNegativeButtonText("Cancel")
             .setTitle("WiLock")
-            .setDescription("Scan your fingerprint to $action your TV")
+            .setDescription("Please verify it's you")
             .build()
 
         val biometricPrompt = BiometricPrompt(this,
@@ -203,7 +271,7 @@ class MainActivity : AppCompatActivity() {
 
                 override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                     super.onAuthenticationSucceeded(result)
-                    currentAction = action
+                    currentAction = if (isLocked) UNLOCK else LOCK
                     runOnUiThread { startConnectionWithTv() }
                 }
 
