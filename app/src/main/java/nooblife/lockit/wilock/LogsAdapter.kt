@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.os.Build
+import android.text.Html
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -14,8 +15,12 @@ import androidx.recyclerview.widget.RecyclerView
 class LogsAdapter(val context: Context, val logs: ArrayList<AppLog>) : RecyclerView.Adapter<LogsAdapter.ViewHolder>() {
 
     fun addLog(log: AppLog) {
+        log.isLatest = true
+        if (logs.isNotEmpty())
+            logs.last().isLatest = false
         logs.add(log)
         notifyItemInserted(itemCount - 1)
+        notifyItemChanged(itemCount - 2)
     }
 
     class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
@@ -40,11 +45,24 @@ class LogsAdapter(val context: Context, val logs: ArrayList<AppLog>) : RecyclerV
             )
         }
 
-        holder.message.text =
-            if (log.status == "success")
-                "${log.action[0].toUpperCase()}${log.action.substring(1)}ed Successfully"
-            else
-                "${log.action[0].toUpperCase()}${log.action.substring(1)} Failed"
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            val latest = if (log.isLatest) "<b>[NOW] " else ""
+            holder.message.text = Html.fromHtml(
+                if (log.status == "success")
+                    "$latest${log.action[0].toUpperCase()}${log.action.substring(1)}ed Successfully"
+                else
+                    "$latest${log.action[0].toUpperCase()}${log.action.substring(1)} Failed"
+                , Html.FROM_HTML_MODE_COMPACT)
+        } else {
+            val latest = if (log.isLatest) "[NOW] " else ""
+            holder.message.text =
+                if (log.status == "success")
+                    "$latest${log.action[0].toUpperCase()}${log.action.substring(1)}ed Successfully"
+                else
+                    "$latest${log.action[0].toUpperCase()}${log.action.substring(1)} Failed"
+        }
+
 
     }
 }

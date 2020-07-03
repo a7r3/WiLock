@@ -1,12 +1,23 @@
 package nooblife.lockit.wilock;
 
 import android.content.Context;
+import android.graphics.Color;
 import android.widget.Toast;
+
+import androidx.core.content.ContextCompat;
 
 public class Util {
 
     public static void showToast(Context context, String text) {
         Toast.makeText(context, text, Toast.LENGTH_SHORT).show();
+    }
+
+    public static int giveMeRed(Context context) {
+        return ContextCompat.getColor(context, R.color.red_500);
+    }
+
+    public static int giveMeGreen(Context context) {
+        return ContextCompat.getColor(context, R.color.green_500);
     }
 
     public static final String LOCKIT_SERVICE_ID = "com.n00blife.lockit.ACTION_LOCKIT_CONNECTIVITY";
