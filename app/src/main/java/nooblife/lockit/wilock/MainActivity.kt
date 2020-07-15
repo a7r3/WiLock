@@ -29,8 +29,11 @@ import com.github.druk.rx2dnssd.Rx2DnssdBindable
 import io.reactivex.schedulers.Schedulers
 import java.io.*
 import java.net.ConnectException
+import java.net.InetSocketAddress
 import java.net.Socket
+import java.net.SocketTimeoutException
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 
 class MainActivity : AppCompatActivity() {
@@ -48,10 +51,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var logsList: RecyclerView
     private var tvBonjourService: BonjourService? = null
 
-    private val LOCK = "lock";
-    private val UNLOCK = "unlock";
-    private val PAIR = "pair";
-    private val CONNECT = "connect";
+    private val LOCK = "lock"
+    private val UNLOCK = "unlock"
+    private val PAIR = "pair"
+    private val CONNECT = "connect"
 
     private lateinit var currentAction: String
     private var connectedTvName: String = "TV"
@@ -60,7 +63,7 @@ class MainActivity : AppCompatActivity() {
     private var currentState: State = State.READY_TO_COMMAND
 
     enum class State {
-        READY_TO_COMMAND, CONNECTION_ONGOING, READY_TO_PAIR
+        READY_TO_COMMAND, CONNECTION_ONGOING, READY_TO_PAIR, NOT_CONNECTED
     }
 
     fun showToast(text: String) {
@@ -77,7 +80,6 @@ class MainActivity : AppCompatActivity() {
         connectionText.text = "${currentAction[0].toUpperCase()}${currentAction.substring(1)}ing $connectedTvName"
         connectionIcon.visibility = View.GONE
         connectionCard.setCardBackgroundColor(ContextCompat.getColor(this, R.color.yellow_800))
-        connectionCard.setOnClickListener {}
 
         currentState = State.CONNECTION_ONGOING
         resolveAndConnectToClient()
@@ -128,14 +130,25 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun setReadyToPair() {
+        connectionText.text = "Tap to pair with your TV now"
         lockCommandCard.visibility = View.GONE
         connectionProgress.visibility = View.GONE
-        connectionText.text = "Tap to pair with your TV now"
         connectionIcon.visibility = View.GONE
         connectionCard.setCardBackgroundColor(ContextCompat.getColor(this, R.color.yellow_800))
 
         currentState = State.READY_TO_PAIR
         currentAction = PAIR
+    }
+
+    fun setReconnect() {
+        connectionText.text = "Tap to try again"
+        connectionIcon.visibility = View.GONE
+        lockCommandCard.visibility = View.GONE
+        connectionProgress.visibility = View.GONE
+        connectionCard.setCardBackgroundColor(ContextCompat.getColor(this, R.color.yellow_800))
+
+        currentState = State.NOT_CONNECTED
+        currentAction = CONNECT
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -165,6 +178,8 @@ class MainActivity : AppCompatActivity() {
         connectionCard.setOnClickListener {
             if (currentState == State.READY_TO_PAIR)
                 startConnectionWithTv(PAIR)
+            else if (currentState == State.NOT_CONNECTED)
+                startConnectionWithTv(CONNECT)
         }
 
         // </UI>
@@ -184,7 +199,8 @@ class MainActivity : AppCompatActivity() {
 
     fun connectToClient(host: String?, port: Int) {
         try {
-            val socket = Socket(host, port)
+            val socket = Socket()
+            socket.connect(InetSocketAddress(host, port), 5000)
             Log.d(TAG, "connectToClient: Connection to Server Success")
             val bufferedOutputStream = BufferedOutputStream(socket.getOutputStream())
             val printWriter = PrintWriter(bufferedOutputStream)
@@ -216,8 +232,13 @@ class MainActivity : AppCompatActivity() {
                 (logsList.adapter as LogsAdapter).addLog(AppLog(currentAction, "success", true))
                 setReadyToCommand()
             }
+        } catch (ste: SocketTimeoutException) {
+            Log.e(TAG, "connectToClient: client IP possibly changed OR Service isn't running")
+            ste.printStackTrace()
+            tvBonjourService = null
+            resolveAndConnectToClient()
         } catch (ce: ConnectException) {
-            Log.e(TAG, "connectToClient: ERROR: client IP possibly changed")
+            Log.e(TAG, "connectToClient: client IP possibly changed OR Service isn't running")
             tvBonjourService = null
             resolveAndConnectToClient()
         } catch (ioe: IOException) {
@@ -237,7 +258,8 @@ class MainActivity : AppCompatActivity() {
         } ?: run {
             var isResolvedOnce = false;
             val rx2Dnssd = Rx2DnssdBindable(this)
-            val browseDisposable = rx2Dnssd.browse(Util.LOCKIT_SERVICE_TEMPLATE.format(Util.LOCKIT_DEFAULT_SERVICE_ID), "local.")
+            rx2Dnssd.browse(Util.LOCKIT_SERVICE_TEMPLATE.format(Util.LOCKIT_DEFAULT_SERVICE_ID), "local.")
+                .timeout(5000, TimeUnit.MILLISECONDS)
                 .compose(rx2Dnssd.resolve())
                 .compose(rx2Dnssd.queryIPV4Records())
                 .subscribeOn(Schedulers.io())
@@ -262,6 +284,15 @@ class MainActivity : AppCompatActivity() {
                     connectToClient(it.inet4Address?.hostAddress, it.port)
                 }, {
                     it.printStackTrace()
+                    runOnUiThread {
+                        if (currentAction == PAIR) {
+                            showToast("Check if LockIt is running in your TV and it's in the same WiFi network")
+                            setReadyToPair()
+                        } else {
+                            showToast("Check if your TV is connected to this WiFi network")
+                            setReconnect()
+                        }
+                    }
                 }, {
                 })
         }
@@ -270,11 +301,6 @@ class MainActivity : AppCompatActivity() {
     fun authAndSend() {
         if (currentState == State.CONNECTION_ONGOING) {
             showToast("Another request is in progress")
-            return
-        }
-
-        if (currentState == State.READY_TO_PAIR) {
-            showToast("Not paired with your TV")
             return
         }
 
