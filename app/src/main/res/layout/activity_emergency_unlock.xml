@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="vertical"
+    android:padding="24dp"
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <TextView
+        android:id="@+id/title"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:background="@color/colorAccent"
+        android:gravity="center"
+        android:text="@string/app_name"
+        android:textColor="#202020"
+        android:textSize="18sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_marginTop="16dp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Cannot unlock your device?\nFollow these steps"
+        android:textSize="20sp"
+        android:textStyle="bold|italic"/>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:lineSpacingExtra="2sp"
+        android:layout_marginTop="16dp"
+        android:text="Note that you'd require to pair your TV with this device again"
+        android:textStyle="italic|bold"/>
+
+    <TextView
+        android:layout_marginTop="16dp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:lineSpacingExtra="8sp"
+        android:text="1. Open LockIt app or any app which is Locked\n2. Choose 'Emergency Unlock' when the Lock Screen is shown\n3. Enter the following code" />
+
+    <TextView
+        android:id="@+id/emergency_unlock_code"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="X X X X"
+        android:padding="16dp"
+        android:gravity="center"
+        android:textStyle="bold"
+        android:textSize="28sp"/>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:lineSpacingExtra="8sp"
+        android:text="4. Once unlocked, tap 'Reset NOW' button to pair again with your TV" />
+
+    <androidx.cardview.widget.CardView
+        android:id="@+id/completion_button"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        app:cardBackgroundColor="@color/colorPrimary"
+        app:cardCornerRadius="8dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Proceed"
+            android:textStyle="bold"
+            android:padding="16dp"
+            android:textSize="18sp"
+            android:textColor="#fff"
+            android:layout_gravity="center" />
+
+    </androidx.cardview.widget.CardView>
+
+</LinearLayout>

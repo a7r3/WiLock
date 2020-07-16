@@ -12,7 +12,7 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 
-class LogsAdapter(val context: Context, val logs: ArrayList<AppLog>) : RecyclerView.Adapter<LogsAdapter.ViewHolder>() {
+class LogsAdapter(private val context: Context, private val logs: ArrayList<AppLog>) : RecyclerView.Adapter<LogsAdapter.ViewHolder>() {
 
     fun addLog(log: AppLog) {
         log.isLatest = true

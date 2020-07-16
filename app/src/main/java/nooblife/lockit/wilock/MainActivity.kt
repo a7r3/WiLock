@@ -1,7 +1,8 @@
 package nooblife.lockit.wilock
 
+import android.app.Activity
+import android.content.Intent
 import android.content.SharedPreferences
-import android.content.res.ColorStateList
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
@@ -48,6 +49,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var connectionIcon: ImageView
     private lateinit var connectionText: TextView
     private lateinit var connectionCard: CardView
+    private lateinit var emergencyUnlockCard: CardView
     private lateinit var logsList: RecyclerView
     private var tvBonjourService: BonjourService? = null
 
@@ -55,6 +57,8 @@ class MainActivity : AppCompatActivity() {
     private val UNLOCK = "unlock"
     private val PAIR = "pair"
     private val CONNECT = "connect"
+    private val EMERGENCY_UNLOCK = "E_unlock"
+    private val EMERGENCY_UNLOCK_RQ = 129
 
     private lateinit var currentAction: String
     private var connectedTvName: String = "TV"
@@ -75,9 +79,9 @@ class MainActivity : AppCompatActivity() {
     fun startConnectionWithTv(action: String) {
         currentAction = action
 
+        connectionText.text = "${currentAction[0].toUpperCase()}${currentAction.substring(1)}ing $connectedTvName"
         lockCommandCard.visibility = View.GONE
         connectionProgress.visibility = View.VISIBLE
-        connectionText.text = "${currentAction[0].toUpperCase()}${currentAction.substring(1)}ing $connectedTvName"
         connectionIcon.visibility = View.GONE
         connectionCard.setCardBackgroundColor(ContextCompat.getColor(this, R.color.yellow_800))
 
@@ -146,6 +150,7 @@ class MainActivity : AppCompatActivity() {
         lockCommandCard.visibility = View.GONE
         connectionProgress.visibility = View.GONE
         connectionCard.setCardBackgroundColor(ContextCompat.getColor(this, R.color.yellow_800))
+        emergencyUnlockCard.visibility = View.VISIBLE
 
         currentState = State.NOT_CONNECTED
         currentAction = CONNECT
@@ -169,7 +174,7 @@ class MainActivity : AppCompatActivity() {
 
         lockCommandCard = findViewById(R.id.lock_card)
         lockCommandButton = findViewById(R.id.lock)
-        lockCommandButton.setOnClickListener { authAndSend() }
+        lockCommandButton.setOnClickListener { authAndDoWork() }
 
         connectionProgress = findViewById(R.id.connection_progress)
         connectionIcon = findViewById(R.id.connection_status_icon)
@@ -182,6 +187,12 @@ class MainActivity : AppCompatActivity() {
                 startConnectionWithTv(CONNECT)
         }
 
+        emergencyUnlockCard = findViewById(R.id.emergency_reset_button)
+        emergencyUnlockCard.setOnClickListener {
+            currentAction = EMERGENCY_UNLOCK
+            authAndDoWork()
+        }
+
         // </UI>
 
         sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this)
@@ -192,8 +203,10 @@ class MainActivity : AppCompatActivity() {
 
         if (tvServiceId == Util.LOCKIT_DEFAULT_SERVICE_ID) {
             setReadyToPair()
+            emergencyUnlockCard.visibility = View.GONE
         } else {
             startConnectionWithTv(CONNECT)
+            emergencyUnlockCard.visibility = View.VISIBLE;
         }
     }
 
@@ -214,7 +227,9 @@ class MainActivity : AppCompatActivity() {
             when (currentAction) {
                 PAIR -> {
                     Log.d(TAG, "connectToClient: dedicated service id $serverSays")
-                    sharedPreferences.edit().putString(Util.PREF_LOCKIT_RC_SERVICE_ID, serverSays).apply()
+                    val pairText = serverSays.split("|")
+                    sharedPreferences.edit().putString(Util.PREF_LOCKIT_RC_SERVICE_ID, pairText[0]).apply()
+                    sharedPreferences.edit().putString(Util.PREF_EMERGENCY_UNLOCK_CODE, pairText[1]).apply()
                 }
                 CONNECT -> {
                     Log.d(TAG, "connectToClient: success");
@@ -298,7 +313,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    fun authAndSend() {
+    fun authAndDoWork() {
         if (currentState == State.CONNECTION_ONGOING) {
             showToast("Another request is in progress")
             return
@@ -320,7 +335,12 @@ class MainActivity : AppCompatActivity() {
 
                 override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                     super.onAuthenticationSucceeded(result)
-                    runOnUiThread { startConnectionWithTv(if (isLocked) UNLOCK else LOCK) }
+                    runOnUiThread {
+                        if (currentAction == EMERGENCY_UNLOCK)
+                            startActivityForResult(Intent(this@MainActivity, EmergencyUnlockActivity::class.java), EMERGENCY_UNLOCK_RQ)
+                        else
+                            startConnectionWithTv(if (isLocked) UNLOCK else LOCK)
+                    }
                 }
 
                 override fun onAuthenticationFailed() {
@@ -332,4 +352,9 @@ class MainActivity : AppCompatActivity() {
         biometricPrompt.authenticate(promptInfo)
     }
 
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == EMERGENCY_UNLOCK_RQ && resultCode == Activity.RESULT_OK)
+            recreate()
+    }
 }
