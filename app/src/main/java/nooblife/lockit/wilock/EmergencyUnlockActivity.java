@@ -24,7 +24,7 @@ public class EmergencyUnlockActivity extends Activity {
         completionButton.setOnClickListener(view ->
                 new AlertDialog.Builder(EmergencyUnlockActivity.this)
                         .setTitle("Confirmation Required")
-                        .setMessage("If your TV is unlocked, tap YES to return to the app")
+                        .setMessage("If your TV is unlocked after following these steps, tap YES to reset the app")
                         .setNegativeButton("NO", (dialogInterface, i) -> finish())
                         .setPositiveButton("YES", (dialogInterface, i) -> {
                             setResult(RESULT_OK);

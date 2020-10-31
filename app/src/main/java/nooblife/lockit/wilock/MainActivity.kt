@@ -35,6 +35,7 @@ import java.net.Socket
 import java.net.SocketTimeoutException
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 
 
 class MainActivity : AppCompatActivity() {
@@ -254,6 +255,7 @@ class MainActivity : AppCompatActivity() {
             resolveAndConnectToClient()
         } catch (ce: ConnectException) {
             Log.e(TAG, "connectToClient: client IP possibly changed OR Service isn't running")
+            ce.printStackTrace()
             tvBonjourService = null
             resolveAndConnectToClient()
         } catch (ioe: IOException) {
@@ -274,17 +276,13 @@ class MainActivity : AppCompatActivity() {
             var isResolvedOnce = false;
             val rx2Dnssd = Rx2DnssdBindable(this)
             rx2Dnssd.browse(Util.LOCKIT_SERVICE_TEMPLATE.format(Util.LOCKIT_DEFAULT_SERVICE_ID), "local.")
-                .timeout(5000, TimeUnit.MILLISECONDS)
                 .compose(rx2Dnssd.resolve())
                 .compose(rx2Dnssd.queryIPV4Records())
+                .timeout(5000, TimeUnit.MILLISECONDS)
+                .take(1)
                 .subscribeOn(Schedulers.io())
                 .observeOn(Schedulers.io())
                 .subscribe({
-
-                    if (isResolvedOnce)
-                        return@subscribe
-
-                    isResolvedOnce = true
 
                     if (currentAction == PAIR) {
                         sharedPreferences.edit().putString(Util.PREF_LOCKIT_TV_NAME, it.serviceName).apply()
@@ -296,7 +294,6 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     Log.d(TAG, "startDiscovery: Registered successfully ${it.inet4Address}")
-                    connectToClient(it.inet4Address?.hostAddress, it.port)
                 }, {
                     it.printStackTrace()
                     runOnUiThread {
@@ -309,6 +306,9 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                 }, {
+                    tvBonjourService?.let {
+                        connectToClient(it.inet4Address?.hostAddress, it.port)
+                    }
                 })
         }
     }
